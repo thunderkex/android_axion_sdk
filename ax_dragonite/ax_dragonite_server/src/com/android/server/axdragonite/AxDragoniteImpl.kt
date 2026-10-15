@@ -138,6 +138,7 @@ class AxDragoniteImpl(context: Context? = null) : IAxDragonite {
 
     private val mCommandsMap = HashMap<Int, AxCommandExec>()
     private var mGameModeEnabled = false
+    private var mGameModeHandle = AxDragoniteConstants.INVALID_HANDLE
 
     init {
         logDebug(TAG, "create AxDragonite")
@@ -981,10 +982,7 @@ class AxDragoniteImpl(context: Context? = null) : IAxDragonite {
         currentActiveHandle = handle
         dispatchScene(sceneId, bundle)
         if (duration > 0) {
-            mDragoniteHandler.sendEmptyMessageDelayed(
-                handle + HANDLE_MESSAGE_OFFSET,
-                duration.toLong(),
-            )
+            scheduleTimeout(handle, duration)
         }
     }
 
@@ -992,6 +990,10 @@ class AxDragoniteImpl(context: Context? = null) : IAxDragonite {
         val messageId = handle + HANDLE_MESSAGE_OFFSET
         mDragoniteHandler.removeMessages(messageId)
         mDragoniteHandler.sendEmptyMessageDelayed(messageId, duration.toLong())
+    }
+
+    private fun cancelTimeout(handle: Int) {
+        mDragoniteHandler.removeMessages(handle + HANDLE_MESSAGE_OFFSET)
     }
 
     override fun sceneBoostAcquire(sceneId: Int, bundle: Bundle?): Int {
@@ -1043,6 +1045,7 @@ class AxDragoniteImpl(context: Context? = null) : IAxDragonite {
             Slog.d(TAG, "invalid handle, ignore!")
             return
         }
+        cancelTimeout(handle)
         mManagerHandler.post(SceneRelease(this, handle))
     }
 
@@ -1073,6 +1076,7 @@ class AxDragoniteImpl(context: Context? = null) : IAxDragonite {
     }
 
     fun releaseScene(handle: Int) {
+        cancelTimeout(handle)
         restoreHandle(handle)
         mSessionRecords.releaseRecord(handle)
         if (handle != currentActiveHandle) return
@@ -1133,9 +1137,10 @@ class AxDragoniteImpl(context: Context? = null) : IAxDragonite {
     override fun updateGameModeBoost(enabled: Boolean) {
         mGameModeEnabled = enabled
         if (enabled) {
-            sceneBoostAcquire(AxDragoniteConstants.SCENE_GAME_1, null)
-        } else {
-            sceneBoostRelease(AxDragoniteConstants.SCENE_GAME_1)
+            mGameModeHandle = sceneBoostAcquire(AxDragoniteConstants.SCENE_GAME_1, null)
+        } else if (mGameModeHandle != AxDragoniteConstants.INVALID_HANDLE) {
+            sceneBoostRelease(mGameModeHandle)
+            mGameModeHandle = AxDragoniteConstants.INVALID_HANDLE
         }
     }
 
